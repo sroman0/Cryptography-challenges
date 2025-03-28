@@ -1,0 +1,2 @@
+The function you're meant to discover and use is:
+EVP_get_cipherbyname

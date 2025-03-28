@@ -1,65 +1,107 @@
+/*
+Write a program that computes the HMAC-SHA256 of two files whose names are passed as parameters from the command line (start from HMAC_computation_EVP).
+
+The flag is obtained as
+
+CRYPTO25{hmac}
+
+where hmac is obtained using the secret "keykeykeykeykeykey" and the two files attached to this challenge (and hexdigits in lowercase):
+
+hmac = hex(HMAC-SHA256("keykeykeykeykeykey", file,file2))
+
+where "keykeykeykeykeykey" is an ASCII string (no quotation marks)*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <openssl/evp.h>
+#include <openssl/err.h>
 #include <openssl/hmac.h>
 
-#define KEY "keykeykeykeykeykey"
+#define MAX_BUFFER 1024
 
-void print_hex(const unsigned char *digest, int len) {
-    for (int i = 0; i < len; i++) {
-        printf("%02x", digest[i]);
-    }
+void handle_errors(void) {
+    ERR_print_errors_fp(stderr);
+    abort();
 }
 
-unsigned char* read_file(const char* filename, size_t* length_out) {
-    FILE* f = fopen(filename, "rb");
-    if (!f) {
-        fprintf(stderr, "Failed to open file: %s\n", filename);
-        exit(1);
-    }
-
-    fseek(f, 0, SEEK_END);
-    size_t len = ftell(f);
-    rewind(f);
-
-    unsigned char* buffer = malloc(len);
-    if (fread(buffer, 1, len, f) != len) {
-        fprintf(stderr, "Failed to read file: %s\n", filename);
-        exit(1);
-    }
-
-    fclose(f);
-    *length_out = len;
-    return buffer;
-}
-
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
+    /* Check if the correct number of arguments is provided */
     if (argc != 3) {
-        fprintf(stderr, "Usage: %s <file1> <file2>\n", argv[0]);
-        return 1;
+        fprintf(stderr, "Invalid parameters. Usage: %s <file1> <file2>\n", argv[0]);
+        exit(1);
     }
 
-    size_t len1, len2;
-    unsigned char *data1 = read_file(argv[1], &len1);
-    unsigned char *data2 = read_file(argv[2], &len2);
+    /* Open the first input file */
+    FILE *f_in1;
+    if ((f_in1 = fopen(argv[1], "r")) == NULL) {
+        fprintf(stderr, "Error opening the input file: %s\n", argv[1]);
+        exit(1);
+    }
 
-    // Allocate combined buffer
-    size_t total_len = len1 + len2;
-    unsigned char *data = malloc(total_len);
-    memcpy(data, data1, len1);
-    memcpy(data + len1, data2, len2);
+    /* Open the second input file */
+    FILE *f_in2;
+    if ((f_in2 = fopen(argv[2], "r")) == NULL) {
+        fprintf(stderr, "Error opening the input file: %s\n", argv[2]);
+        exit(1);
+    }
 
-    unsigned char hmac[EVP_MAX_MD_SIZE];
-    unsigned int hmac_len;
+    /* Load the human readable error strings for libcrypto */
+    ERR_load_crypto_strings();
+    /* Load all digest and cipher algorithms */
+    OpenSSL_add_all_algorithms();
 
-    HMAC(EVP_sha256(), KEY, strlen(KEY), data, total_len, hmac, &hmac_len);
+    /* Define the secret key */
+    unsigned char key[] = "keykeykeykeykeykey"; // ASCII
+    EVP_PKEY *hmac_key = EVP_PKEY_new_mac_key(EVP_PKEY_HMAC, NULL, key, strlen(key));
 
-    printf("CRYPTO25{");
-    print_hex(hmac, hmac_len);
-    printf("}\n");
+    /* Create a new HMAC context */
+    EVP_MD_CTX *hmac_ctx = EVP_MD_CTX_new(); // Check for NULL
 
-    free(data1);
-    free(data2);
-    free(data);
+    /* Initialize the HMAC context with SHA256 */
+    if (!EVP_DigestSignInit(hmac_ctx, NULL, EVP_sha256(), NULL, hmac_key))
+        handle_errors();
+
+    int n_read;
+    unsigned char buffer[MAX_BUFFER];
+
+    /* Read and update the HMAC with the contents of the first file */
+    while ((n_read = fread(buffer, 1, MAX_BUFFER, f_in1)) > 0) {
+        if (!EVP_DigestSignUpdate(hmac_ctx, buffer, n_read))
+            handle_errors();
+    }
+
+    /* Read and update the HMAC with the contents of the second file */
+    while ((n_read = fread(buffer, 1, MAX_BUFFER, f_in2)) > 0) {
+        if (!EVP_DigestSignUpdate(hmac_ctx, buffer, n_read))
+            handle_errors();
+    }
+
+    /* Finalize the HMAC computation */
+    unsigned char hmac_value[EVP_MAX_MD_SIZE]; // Use EVP_MAX_MD_SIZE for buffer size
+    size_t hmac_len;
+
+    if (!EVP_DigestSignFinal(hmac_ctx, NULL, &hmac_len)) // Get the length of the HMAC
+        handle_errors();
+
+    if (!EVP_DigestSignFinal(hmac_ctx, hmac_value, &hmac_len)) // Get the HMAC value
+        handle_errors();
+
+    /* Free the HMAC context */
+    EVP_MD_CTX_free(hmac_ctx);
+
+    /* Print the HMAC in hexadecimal format */
+    printf("The HMAC is: ");
+    for (int i = 0; i < hmac_len; i++)
+        printf("%02x", hmac_value[i]);
+    printf("\n");
+
+    /* Clean up */
+    fclose(f_in1);
+    fclose(f_in2);
+    EVP_PKEY_free(hmac_key);
+    CRYPTO_cleanup_all_ex_data();
+    ERR_free_strings();
+
     return 0;
 }

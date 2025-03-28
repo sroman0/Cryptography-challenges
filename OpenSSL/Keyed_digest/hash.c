@@ -1,63 +1,104 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <openssl/sha.h>
+/*
+Given the secret (represented as a C variable)
 
 unsigned char secret[] = "this_is_my_secret";
 
-void compute_keyed_digest(const char *input_file) {
-    FILE *file = fopen(input_file, "rb");
-    if (!file) {
-        perror("Failed to open file");
-        exit(EXIT_FAILURE);
-    }
+Write a program in C that computes the keyed digest as
 
-    fseek(file, 0, SEEK_END);
-    long file_size = ftell(file);
-    fseek(file, 0, SEEK_SET);
+kd = SHA512 ( secret || input_file || secret)
 
-    unsigned char *file_content = malloc(file_size);
-    if (!file_content) {
-        perror("Failed to allocate memory");
-        fclose(file);
-        exit(EXIT_FAILURE);
-    }
+where || indicates the concatenation (without adding any space characters)
+hex computes the representation as an hexstring
+Surround with CRYPTO25{hex(kd)} to obtain the flag.
 
-    fread(file_content, 1, file_size, file);
-    fclose(file);
+HINT: start from hash3.c or hash4.c*/
 
-    size_t total_size = sizeof(secret) - 1 + file_size + sizeof(secret) - 1;
-    unsigned char *buffer = malloc(total_size);
-    if (!buffer) {
-        perror("Failed to allocate memory");
-        free(file_content);
-        exit(EXIT_FAILURE);
-    }
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-    memcpy(buffer, secret, sizeof(secret) - 1);
-    memcpy(buffer + sizeof(secret) - 1, file_content, file_size);
-    memcpy(buffer + sizeof(secret) - 1 + file_size, secret, sizeof(secret) - 1);
+#include <openssl/evp.h>
+#include <openssl/err.h>
 
-    unsigned char hash[SHA512_DIGEST_LENGTH];
-    SHA512(buffer, total_size, hash);
+#define MAXBUF 1024 // Define the maximum buffer size for reading the file
 
-    free(file_content);
-    free(buffer);
+/* Secret key */
+unsigned char secret[] = "this_is_my_secret"; // Define the secret key used for keyed digest computation
 
-    char hex_output[SHA512_DIGEST_LENGTH * 2 + 1];
-    for (int i = 0; i < SHA512_DIGEST_LENGTH; i++) {
-        sprintf(hex_output + i * 2, "%02x", hash[i]);
-    }
-
-    printf("CRYPTO25{%s}\n", hex_output);
-}
-
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
+    // Check if the correct number of arguments is provided
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s <input_file>\n", argv[0]);
-        return EXIT_FAILURE;
+        fprintf(stderr, "Invalid parameters. Usage: %s filename\n", argv[0]); // Print usage instructions
+        exit(1); // Exit with failure
     }
 
-    compute_keyed_digest(argv[1]);
-    return EXIT_SUCCESS;
+    /* Open the input file */
+    FILE *f_in;
+    if ((f_in = fopen(argv[1], "r")) == NULL) { // Open the input file in read mode
+        fprintf(stderr, "Couldn't open the input file, try again\n"); // Print error if file cannot be opened
+        exit(1); // Exit with failure
+    }
+
+    /* Create a new digest context */
+    EVP_MD_CTX *md = EVP_MD_CTX_new(); // Allocate a new digest context
+    if (md == NULL) {
+        fprintf(stderr, "Failed to create digest context\n"); // Print error if context creation fails
+        exit(1); // Exit with failure
+    }
+
+    /* Initialize the digest context with SHA512 */
+    if (EVP_DigestInit(md, EVP_sha512()) != 1) { // Initialize the digest context with the SHA512 algorithm
+        fprintf(stderr, "Failed to initialize digest context\n"); // Print error if initialization fails
+        EVP_MD_CTX_free(md); // Free the digest context
+        exit(1); // Exit with failure
+    }
+
+    /* Update the digest with the first secret */
+    if (EVP_DigestUpdate(md, secret, strlen((char *)secret)) != 1) { // Add the first secret to the digest
+        fprintf(stderr, "Failed to update digest with secret\n"); // Print error if update fails
+        EVP_MD_CTX_free(md); // Free the digest context
+        exit(1); // Exit with failure
+    }
+
+    /* Read the input file and update the digest */
+    int n;
+    unsigned char buffer[MAXBUF]; // Buffer to hold file data
+    while ((n = fread(buffer, 1, MAXBUF, f_in)) > 0) { // Read the file in chunks
+        if (EVP_DigestUpdate(md, buffer, n) != 1) { // Add the file data to the digest
+            fprintf(stderr, "Failed to update digest with file content\n"); // Print error if update fails
+            EVP_MD_CTX_free(md); // Free the digest context
+            exit(1); // Exit with failure
+        }
+    }
+
+    /* Update the digest with the second secret */
+    if (EVP_DigestUpdate(md, secret, strlen((char *)secret)) != 1) { // Add the second secret to the digest
+        fprintf(stderr, "Failed to update digest with secret\n"); // Print error if update fails
+        EVP_MD_CTX_free(md); // Free the digest context
+        exit(1); // Exit with failure
+    }
+
+    /* Finalize the digest */
+    unsigned char md_value[EVP_MD_size(EVP_sha512())]; // Buffer to hold the final digest
+    unsigned int md_len; // Variable to hold the length of the digest
+    if (EVP_DigestFinal_ex(md, md_value, &md_len) != 1) { // Finalize the digest computation
+        fprintf(stderr, "Failed to finalize digest\n"); // Print error if finalization fails
+        EVP_MD_CTX_free(md); // Free the digest context
+        exit(1); // Exit with failure
+    }
+
+    /* Free the digest context */
+    EVP_MD_CTX_free(md); // Free the allocated digest context
+
+    /* Print the digest as a hex string */
+    printf("CRYPTO25{"); // Print the flag prefix
+    for (unsigned int i = 0; i < md_len; i++) {
+        printf("%02x", md_value[i]); // Print each byte of the digest as a two-digit hexadecimal number
+    }
+    printf("}\n"); // Close the flag
+
+    /* Close the input file */
+    fclose(f_in); // Close the file
+
+    return 0; // Exit successfully
 }

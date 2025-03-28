@@ -1,0 +1,1 @@
+FUNCTION TO DISABLE PADDING: EVP_CIPHER_CTX_set_padding(ctx, 0);
