@@ -21,6 +21,14 @@ When you succeed, build the flag in this way (Python-style string concatenation)
 
 #define MAXBUF 1024 // Define the maximum buffer size for plaintext
 
+// Print a buffer as hexadecimal
+void print_hex(const unsigned char *data, int len) {
+    for (int i = 0; i < len; i++) {
+        printf("%02x", data[i]);
+    }
+    printf("\n");
+}
+
 // Function to handle OpenSSL errors
 void handle_errors() {
     ERR_print_errors_fp(stderr); // Print OpenSSL error messages to stderr
@@ -28,6 +36,8 @@ void handle_errors() {
 }
 
 // Function to decode a Base64-encoded string
+// why do we decode the base64 string?
+// because the ciphertext is in base64 format, and we need to decode it to get the raw binary data for decryption
 int base64_decode(const char *b64_input, unsigned char **output) {
     BIO *b64, *bio;
     int length = strlen(b64_input); // Get the length of the Base64 input
@@ -41,14 +51,19 @@ int base64_decode(const char *b64_input, unsigned char **output) {
 
     int decoded_length = BIO_read(bio, *output, length); // Decode the Base64 input
     BIO_free_all(bio); // Free all BIOs
+    //print output in hex format
+    printf("Decoded output: ");
+    print_hex(*output, decoded_length); // Print the decoded output in hexadecimal format
+    printf("\n");
+
     return decoded_length; // Return the length of the decoded data
 }
 
 // Function to print data in hexadecimal format
-void print_hex(const unsigned char *data, int len) {
-    for (int i = 0; i < len; i++)
-        printf("%02x", data[i]); // Print each byte as a two-digit hexadecimal number
-}
+//void print_hex(const unsigned char *data, int len) {
+//    for (int i = 0; i < len; i++)
+//        printf("%02x", data[i]); // Print each byte as a two-digit hexadecimal number
+//}
 
 int main() {
     const char *base64_input = "ZZJ+BKJNdpXA2jaX8Zg5ItRola18hi95MG8fA/9RPvg="; // Base64-encoded ciphertext

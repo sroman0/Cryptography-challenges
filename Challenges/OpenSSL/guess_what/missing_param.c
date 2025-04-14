@@ -79,7 +79,7 @@ int main() {
     BN_CTX *ctx = BN_CTX_new(); // Create a BN_CTX structure for temporary variables
     BIGNUM *rem = BN_new(); // Create a BIGNUM for the remainder
 
-    // Calculate q = n / p
+    // Calculate q = n / p (RSA key generation)
     if (!BN_div(q, rem, n, p, ctx)) { // Perform division
         fprintf(stderr, "Error during division\n");
         exit(1); // Exit if division fails
