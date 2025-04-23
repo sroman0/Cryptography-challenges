@@ -16,7 +16,7 @@ def main():
     seed = int(input(
         "Hi, our system doesn't support analogic entropy... so please give a value to initialize me!\n> "))
     random.seed(seed)
-    nonce = random.getrandbits(12*8)
+    nonce = random.getrandbits(12*8) #96 bits
 
     print("OK! I can now give you the encrypted secret!")
     print(encrypt_and_update(flag, nonce).hex())

@@ -15,7 +15,7 @@ class RandomCipherRandomMode():
     def __init__(self):
         modes = [AES.MODE_ECB, AES.MODE_CBC]
         self.mode = random.choice(modes)
-        self.key = get_random_bytes(32)
+        self.key = get_random_bytes(32) 
         if self.mode == AES.MODE_ECB:
             self.iv = None
             self.cipher = AES.new(key=self.key, mode=self.mode)

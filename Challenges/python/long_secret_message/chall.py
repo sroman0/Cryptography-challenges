@@ -14,5 +14,5 @@ for line in lines:
     cipher = ChaCha20.new(key=key, nonce=nonce)
     enc.append(cipher.encrypt(line.encode()).hex())
 
-with open("./hacker-manifesto.enc", "w") as f:
+with open("./hacker-manifesto2.enc", "w") as f:
     f.write("\n".join(enc))
