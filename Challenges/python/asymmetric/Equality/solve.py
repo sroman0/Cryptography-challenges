@@ -1,39 +1,50 @@
-from pwn import remote
-from Crypto.Hash import MD4
-import hashlib
+#!/usr/bin/env python3
+#
+# Solve “Equality” CTF – find s1 ≠ s2 with
+# MD4(s1)==MD4(s2) AND MD5(s1)≠MD5(s2), then grab the flag.
 
-# --- Minimal MD4 collision generator (from veorq/md4coll) ---
-def md4_collision():
-    # These two blocks are a real MD4 collision (from https://github.com/veorq/md4coll/blob/master/coll1.bin and coll2.bin)
-    m1 = bytes.fromhex(
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c8a"
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c8a"
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c8a"
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c8a"
-    )
-    m2 = bytes.fromhex(
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c8a"
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c8a"
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c8a"
-        "839b1e5b8e7b2c8a2b8e1e5b8e7b2c0a"
-    )
-    return m1, m2
+import socket, binascii, time
+from Crypto.Hash import MD4          # pip install pycryptodome
+import hashlib                       # std-lib
 
-def main():
-    HOST, PORT = "130.192.5.212", 6631
+# --- 1.  hard-wired MD4 collision pair (64 bytes each) ----------
+hex1 = (
+    "839c7a4d7a92cb5678a5d5b9eea5a7573c8a74deb366c3dc20a083b6"
+    "9f5d2a3bb3719dc69891e9f95e809fd7e8b23ba6318edd45e51fe397"
+    "08bf9427e9c3e8b9"
+)
 
-    m1, m2 = md4_collision()
+hex2 = (
+    "839c7a4d7a92cbd678a5d529eea5a7573c8a74deb366c3dc20a083b6"
+    "9f5d2a3bb3719dc69891e9f95e809fd7e8b23ba6318edc45e51fe397"
+    "08bf9427e9c3e8b9"
+)
 
-    # Sanity check
-    assert MD4.new(m1).hexdigest() == MD4.new(m2).hexdigest()
-    assert hashlib.md5(m1).hexdigest() != hashlib.md5(m2).hexdigest()
+assert len(hex1) == 128 and len(hex2) == 128 and hex1 != hex2
 
-    r = remote(HOST, PORT)
-    r.recvuntil(b"Enter the first string:")
-    r.sendline(m1.hex().encode())
-    r.recvuntil(b"Enter your second string:")
-    r.sendline(m2.hex().encode())
-    print(r.recvall().decode())
+def md4(hx: str) -> str:
+    h = MD4.new(); h.update(binascii.unhexlify(hx)); return h.hexdigest()
 
-if __name__ == "__main__":
-    main()
+# Quick local self-test -------------------------------------------------------
+assert md4(hex1) == md4(hex2), "MD4 hashes must coincide"
+assert hashlib.md5(binascii.unhexlify(hex1)).hexdigest() != \
+       hashlib.md5(binascii.unhexlify(hex2)).hexdigest(), "MD5 hashes must differ"
+
+# --- 2.  talk to the remote checker -----------------------------------------
+HOST, PORT = "130.192.5.212", 6631
+with socket.create_connection((HOST, PORT)) as sock:
+    # read the banner
+    banner = sock.recv(1024).decode(errors="ignore")
+    print(banner.strip())
+    # send first string
+    sock.sendall((hex1 + "\n").encode())
+    time.sleep(0.2)
+    # receive next prompt (optional)
+    _ = sock.recv(1024)
+    # send second string
+    sock.sendall((hex2 + "\n").encode())
+    # grab the final response
+    time.sleep(0.2)
+    result = sock.recv(4096).decode(errors="ignore")
+
+print("\nServer response:\n", result)
